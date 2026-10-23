@@ -6,7 +6,7 @@ A small Windows tray app that keeps a verified backup of the Photoshop file you'
 - **`backup.current.psd`**: a working copy, rebuilt whenever the original changes.
 - **`backup.official.psd`**: the last verified copy. It is replaced only after the current copy checks out.
 
-Every 3 minutes the app checks the original. If it changed, the app:
+Every 5 minutes the app checks the original. If it changed, the app:
 
 1. Waits until Photoshop has finished saving.
 2. Copies the original to the current backup.

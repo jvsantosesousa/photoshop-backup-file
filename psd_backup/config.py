@@ -8,7 +8,7 @@ from pathlib import Path
 
 from . import APP_NAME
 
-DEFAULT_INTERVAL_SEC = 180
+DEFAULT_INTERVAL_SEC = 300
 
 
 def app_dir() -> Path:
