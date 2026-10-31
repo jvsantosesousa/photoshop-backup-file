@@ -75,6 +75,9 @@ def _tk_root():
 
     root = tk.Tk()
     root.withdraw()
+    # Dialogs are owned by this hidden root; without topmost they can open behind
+    # other windows (e.g. the confirm after the file picker), which looks like a hang.
+    root.attributes("-topmost", True)
     root.update()
     root.lift()
     root.focus_force()
@@ -272,6 +275,7 @@ class TrayApp:
     def _run_dialog(self, flow) -> None:
         """Run a dialog flow on its own thread so the tray's message loop never blocks."""
         if self._dialog_open:
+            self._notify("A PSD Backup window is already open")
             return
         self._dialog_open = True
 

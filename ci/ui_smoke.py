@@ -88,6 +88,15 @@ def assert_not_frozen(dlg):
     assert responsive(dlg.handle), "dialog window is not responding"
 
 
+def assert_in_front(dlg):
+    """A dialog behind other windows looks like a hang to the user."""
+    GWL_EXSTYLE, WS_EX_TOPMOST = -20, 0x8
+    topmost = user32.GetWindowLongW(dlg.handle, GWL_EXSTYLE) & WS_EX_TOPMOST
+    assert topmost or user32.GetForegroundWindow() == dlg.handle, (
+        f"dialog {dlg.window_text()!r} opened behind other windows"
+    )
+
+
 def find_menu_item(label):
     # Read items straight from the popup's HMENU (win32); UIA sometimes reports
     # an open popup menu with no children, so it is only the fallback.
@@ -115,7 +124,9 @@ def click_tray_menu(*path):
 
 
 def find_dialog(title):
-    return wait_for(lambda: uia.window(title=title).wrapper_object(), 15, f"dialog {title!r}")
+    dlg = wait_for(lambda: uia.window(title=title).wrapper_object(), 15, f"dialog {title!r}")
+    assert_in_front(dlg)
+    return dlg
 
 
 def search_in_dialog(dlg, text):
@@ -203,7 +214,13 @@ def main(exe):
         assert_not_frozen(dlg)
         item = search_in_dialog(dlg, "alpha_target")
         item.double_click_input()
-        confirm = wait_for(lambda: uia.window(title="PSDBackup").child_window(title="Yes", control_type="Button").wrapper_object(), 15, "confirmation dialog")
+        confirm_dlg = find_dialog("PSDBackup")
+        log("confirmation dialog is in front")
+        confirm = wait_for(
+            lambda: next(b for b in confirm_dlg.descendants(control_type="Button")
+                         if b.window_text().replace("&", "") in ("Yes", "Sim")),
+            15, "Yes button",
+        )
         confirm.click_input()
         wait_for(lambda: cfg()["source"].endswith("alpha_target.psd"), 15, "settings to point at alpha_target.psd")
         wait_for(lambda: (backups / "backup.official.psd").read_bytes() == (work / "alpha_target.psd").read_bytes(), 30, "backup of alpha_target.psd")
@@ -215,7 +232,8 @@ def main(exe):
         assert_not_frozen(dlg)
         item = search_in_dialog(dlg, "zz_new_target")
         item.click_input()
-        next(b for b in dlg.descendants(control_type="Button") if b.window_text() == "Select Folder").click_input()
+        # id 1 is IDOK ("Select Folder"), whatever the Windows display language
+        next(b for b in dlg.descendants(control_type="Button") if b.automation_id() == "1").click_input()
         wait_for(lambda: cfg()["backup_dir"].rstrip("\\/").endswith("zz_new_target"), 15, "settings to point at zz_new_target")
         wait_for(lambda: (backups / "zz_new_target" / "backup.official.psd").exists(), 30, "backup in the new folder")
         log("PASS: Change backup folder via search")
@@ -224,6 +242,13 @@ def main(exe):
         click_tray_menu("Check every", "20 minutes")
         wait_for(lambda: cfg()["interval_sec"] == 1200, 10, "interval_sec == 1200")
         log("PASS: Check every -> 20 minutes")
+
+        step = "backup-now"
+        logged = lambda: log_path.read_text(encoding="utf-8").count("Saved, but content is identical")
+        before = logged()
+        click_tray_menu("Backup now")
+        wait_for(lambda: logged() > before, 30, "Backup now to report its result")
+        log("PASS: Backup now")
 
         step = "quit"
         click_tray_menu("Quit")
