@@ -46,12 +46,13 @@ def main() -> int:
     cfg_path = base / "settings.json"
     cfg = Config.load(cfg_path)
     if not cfg.is_complete:
-        cfg.source = cfg.source or tray.ask_source() or ""
-        if not cfg.source:
-            return 0
-        cfg.backup_dir = cfg.backup_dir or tray.ask_backup_dir() or ""
-        if not cfg.backup_dir:
-            return 0
+        with tray.com_sta():
+            cfg.source = cfg.source or tray.ask_source() or ""
+            if not cfg.source:
+                return 0
+            cfg.backup_dir = cfg.backup_dir or tray.ask_backup_dir() or ""
+            if not cfg.backup_dir:
+                return 0
         cfg.save(cfg_path)
 
     logging.info("Starting: watching %s -> %s every %ss", cfg.source, cfg.backup_dir, cfg.interval_sec)

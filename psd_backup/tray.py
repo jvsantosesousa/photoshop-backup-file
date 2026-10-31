@@ -5,6 +5,8 @@ import logging
 import os
 import subprocess
 import sys
+import threading
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -39,18 +41,51 @@ def make_icon(color) -> Image.Image:
     return img
 
 
-# --- tkinter dialogs (a fresh hidden root per dialog keeps things thread-safe enough) ---
+# --- dialogs ---
+# Windows: tkinter, always called from a dedicated thread with COM initialized as
+# STA (the Explorer search box in the Open dialog needs it). macOS: osascript,
+# since Tk can't run off the main thread there.
+
+@contextmanager
+def com_sta():
+    if sys.platform != "win32":
+        yield
+        return
+    import ctypes
+
+    hr = ctypes.windll.ole32.CoInitializeEx(None, 0x2)  # COINIT_APARTMENTTHREADED
+    try:
+        yield
+    finally:
+        if hr >= 0:
+            ctypes.windll.ole32.CoUninitialize()
+
+
+def _osascript(lines, *args) -> Optional[str]:
+    """Run an AppleScript `on run argv` body; None if the user cancelled."""
+    cmd = ["osascript", "-e", "on run argv", *sum((["-e", l] for l in lines), []), "-e", "end run", *args]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    return proc.stdout.strip() if proc.returncode == 0 else None
+
 
 def _tk_root():
     import tkinter as tk
 
     root = tk.Tk()
     root.withdraw()
-    root.attributes("-topmost", True)
+    root.update()
+    root.lift()
+    root.focus_force()
     return root
 
 
 def ask_source(initial: str = "") -> Optional[str]:
+    if sys.platform == "darwin":
+        return _osascript(
+            ['POSIX path of (choose file with prompt "Choose the PSD you are working on" '
+             'of type {"com.adobe.photoshop-image", "psd", "psb"})']
+        ) or None
+
     from tkinter import filedialog
 
     root = _tk_root()
@@ -67,6 +102,10 @@ def ask_source(initial: str = "") -> Optional[str]:
 
 
 def ask_backup_dir(initial: str = "") -> Optional[str]:
+    if sys.platform == "darwin":
+        path = _osascript(['POSIX path of (choose folder with prompt "Choose the backup folder")'])
+        return path.rstrip("/") if path else None
+
     from tkinter import filedialog
 
     root = _tk_root()
@@ -80,6 +119,14 @@ def ask_backup_dir(initial: str = "") -> Optional[str]:
 
 
 def confirm(title: str, message: str) -> bool:
+    if sys.platform == "darwin":
+        return _osascript(
+            ['display dialog (item 2 of argv) with title (item 1 of argv) '
+             'buttons {"Cancel", "Continue"} default button "Continue"'],
+            title,
+            message,
+        ) is not None
+
     from tkinter import messagebox
 
     root = _tk_root()
@@ -105,6 +152,7 @@ class TrayApp:
         self.last: Optional[Result] = None
         self.last_at: Optional[datetime] = None
         self._failing = False
+        self._dialog_open = False
         self.scheduler = Scheduler(lambda: self.cfg.interval_sec, self._job)
         self.icon = pystray.Icon(APP_NAME, make_icon(COLORS["idle"]), APP_NAME, self._menu())
 
@@ -200,7 +248,30 @@ class TrayApp:
         log.info("Paused" if self.scheduler.paused else "Resumed")
         self._refresh()
 
+    def _run_dialog(self, flow) -> None:
+        """Run a dialog flow on its own thread so the tray's message loop never blocks."""
+        if self._dialog_open:
+            return
+        self._dialog_open = True
+
+        def worker():
+            try:
+                with com_sta():
+                    flow()
+            except Exception:
+                log.exception("Dialog failed")
+            finally:
+                self._dialog_open = False
+
+        threading.Thread(target=worker, name="dialog", daemon=True).start()
+
     def on_change_source(self) -> None:
+        self._run_dialog(self._change_source)
+
+    def on_change_backup_dir(self) -> None:
+        self._run_dialog(self._change_backup_dir)
+
+    def _change_source(self) -> None:
         path = ask_source(self.cfg.source)
         if not path or os.path.normcase(path) == os.path.normcase(self.cfg.source):
             return
@@ -217,7 +288,7 @@ class TrayApp:
         self.engine.reset_detection()
         self.scheduler.trigger()
 
-    def on_change_backup_dir(self) -> None:
+    def _change_backup_dir(self) -> None:
         path = ask_backup_dir(self.cfg.backup_dir)
         if not path:
             return
