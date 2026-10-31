@@ -30,7 +30,7 @@ Run `PSDBackup.exe`. The first time, it asks for the PSD and the backup folder. 
 
 The menu has: Backup now, Pause/Resume, Change PSD…, Change backup folder…, Open backup folder, Open log, Start with Windows, and Quit.
 
-Use **Check every** in the menu to switch between checking every 5 minutes (the default) and every 25 minutes. The change applies immediately and is remembered. A custom value set in `interval_sec` in `settings.json` (in seconds, minimum 10) still works; then neither option shows as selected.
+Use **Check every** in the menu to switch between checking every 5 minutes (the default) and every 20 minutes. The change applies immediately and is remembered. A custom value set in `interval_sec` in `settings.json` (in seconds, minimum 10) still works; then neither option shows as selected.
 
 Settings, state and the log are stored in `%APPDATA%\PSDBackup\`.
 

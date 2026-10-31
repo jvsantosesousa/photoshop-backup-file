@@ -47,6 +47,8 @@ class Config:
         known = {f.name for f in fields(cls)}
         cfg = cls(**{k: v for k, v in data.items() if k in known})
         cfg.interval_sec = max(10, int(cfg.interval_sec))
+        if cfg.interval_sec == 1500:  # the old 25-minute option is now 20 minutes
+            cfg.interval_sec = 1200
         return cfg
 
     def save(self, path: Path) -> None:

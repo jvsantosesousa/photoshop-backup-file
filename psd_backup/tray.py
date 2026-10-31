@@ -21,7 +21,7 @@ from .scheduler import Scheduler
 
 log = logging.getLogger(__name__)
 
-INTERVALS = ((300, "5 minutes"), (1500, "25 minutes"))
+INTERVALS = ((300, "5 minutes"), (1200, "20 minutes"))
 
 COLORS = {
     "ok": (46, 160, 67),

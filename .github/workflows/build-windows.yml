@@ -19,3 +19,11 @@ jobs:
         with:
           name: PSDBackup
           path: dist/PSDBackup.exe
+      # Drive the real exe: tray menu, file/folder pickers with Explorer search, freeze checks
+      - run: python -m pip install pywinauto
+      - run: python ci/ui_smoke.py dist\PSDBackup.exe
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-test-failure
+          path: ui-artifacts/
