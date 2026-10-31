@@ -34,6 +34,7 @@ WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
 ART = Path("ui-artifacts").resolve()
 ART.mkdir(exist_ok=True)
 uia = Desktop(backend="uia")
+w32 = Desktop(backend="win32")
 step = "setup"
 
 
@@ -87,20 +88,29 @@ def assert_not_frozen(dlg):
     assert responsive(dlg.handle), "dialog window is not responding"
 
 
+def find_menu_item(label):
+    # Read items straight from the popup's HMENU (win32); UIA sometimes reports
+    # an open popup menu with no children, so it is only the fallback.
+    for menu in w32.windows(class_name="#32768"):
+        try:
+            for mi in menu.menu().items():
+                if mi.text().replace("&", "") == label:
+                    return mi
+        except Exception:
+            pass
+    for menu in uia.windows(control_type="Menu"):
+        for mi in menu.descendants(control_type="MenuItem"):
+            if mi.window_text() == label:
+                return mi
+    return None
+
+
 def click_tray_menu(*path):
     """Open the tray menu exactly like a right-click does, then click through `path`."""
     for h in tray_hwnds():
         user32.PostMessageW(h, WM_PYSTRAY_NOTIFY, 0, WM_RBUTTONUP)
-    for i, label in enumerate(path):
-        item = wait_for(
-            lambda: next(
-                mi for menu in uia.windows(control_type="Menu")
-                for mi in menu.descendants(control_type="MenuItem") if mi.window_text() == label
-            ),
-            10,
-            f"menu item {label!r}",
-        )
-        item.click_input()
+    for label in path:
+        wait_for(lambda: find_menu_item(label), 10, f"menu item {label!r}").click_input()
         time.sleep(0.5)
 
 
