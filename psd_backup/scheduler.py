@@ -26,6 +26,10 @@ class Scheduler:
         self._force = True
         self._wake.set()
 
+    def reschedule(self) -> None:
+        """Run a normal check now, then wait the (possibly new) interval."""
+        self._wake.set()
+
     def stop(self) -> None:
         self._stop.set()
         self._wake.set()

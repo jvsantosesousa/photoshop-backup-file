@@ -21,6 +21,8 @@ from .scheduler import Scheduler
 
 log = logging.getLogger(__name__)
 
+INTERVALS = ((300, "5 minutes"), (1500, "25 minutes"))
+
 COLORS = {
     "ok": (46, 160, 67),
     "failed": (207, 34, 46),
@@ -225,6 +227,7 @@ class TrayApp:
             pystray.Menu.SEPARATOR,
             item("Backup now", self.on_backup_now, default=True),
             item(lambda _: "Resume" if self.scheduler.paused else "Pause", self.on_pause),
+            item("Check every", pystray.Menu(*(self._interval_item(s, label) for s, label in INTERVALS))),
             pystray.Menu.SEPARATOR,
             item("Change PSD...", self.on_change_source),
             item("Change backup folder...", self.on_change_backup_dir),
@@ -246,6 +249,24 @@ class TrayApp:
     def on_pause(self) -> None:
         self.scheduler.paused = not self.scheduler.paused
         log.info("Paused" if self.scheduler.paused else "Resumed")
+        self._refresh()
+
+    def _interval_item(self, secs: int, label: str) -> pystray.MenuItem:
+        # pystray counts default args as action args, so bind secs via a closure
+        return pystray.MenuItem(
+            label,
+            lambda: self.on_set_interval(secs),
+            checked=lambda _: self.cfg.interval_sec == secs,
+            radio=True,
+        )
+
+    def on_set_interval(self, secs: int) -> None:
+        if self.cfg.interval_sec == secs:
+            return
+        self.cfg.interval_sec = secs
+        self.cfg.save(self.cfg_path)
+        log.info("Check interval set to %s minutes", secs // 60)
+        self.scheduler.reschedule()
         self._refresh()
 
     def _run_dialog(self, flow) -> None:
